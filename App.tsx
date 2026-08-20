@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { FC, useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -17,11 +17,14 @@ const BLUE_TEXT = '#3E7BFA';
 const DARK = '#1C1C1E';
 const GRAY = '#8E8E93';
 
-function SplashScreen({ onFinish }) {
+
+
+type SplashScreenProps = { onFinish: () => void };
+const SplashScreen: FC<SplashScreenProps> = ({ onFinish }) => {
   useEffect(() => {
     const timer = setTimeout(onFinish, 2200);
     return () => clearTimeout(timer);
-  }, []);
+  }, [onFinish]);
 
   return (
     <Pressable style={styles.splashContainer} onPress={onFinish}>
@@ -38,9 +41,9 @@ function SplashScreen({ onFinish }) {
       </View>
     </Pressable>
   );
-}
+};
 
-const MENU_ITEMS = [
+const MENU_ITEMS: { key: string; label: string; icon: string }[] = [
   { key: 'scientific', label: 'Scientific mode', icon: '⊞' },
   { key: 'fraction', label: 'Fraction', icon: '∿' },
   { key: 'handwriting', label: 'Handwriting mode', icon: '✎' },
@@ -52,55 +55,122 @@ const MENU_ITEMS = [
   { key: 'measure', label: 'Measure mode', icon: '↕' },
 ];
 
-function MoreMenuModal({ visible, onClose }) {
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.modalOverlay} onPress={onClose}>
-        <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.modalHandle} />
-          <TouchableOpacity style={styles.modalCloseBtn} onPress={onClose}>
-            <Text style={styles.modalCloseText}>✕</Text>
-          </TouchableOpacity>
-          <View style={{ marginTop: 8 }}>
-            {MENU_ITEMS.map((item) => (
-              <TouchableOpacity key={item.key} style={styles.menuRow} onPress={onClose}>
-                <View style={styles.menuIconBox}>
-                  <Text style={styles.menuIconText}>{item.icon}</Text>
-                </View>
-                <Text style={styles.menuLabel}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </Pressable>
+type MoreMenuModalProps = { visible: boolean; onClose: () => void };
+const MoreMenuModal: FC<MoreMenuModalProps> = ({ visible, onClose }) => (
+  <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Pressable style={styles.modalOverlay} onPress={onClose}>
+      <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+        <View style={styles.modalHandle} />
+        <TouchableOpacity style={styles.modalCloseBtn} onPress={onClose}>
+          <Text style={styles.modalCloseText}>✕</Text>
+        </TouchableOpacity>
+        <View style={{ marginTop: 8 }}>
+          {MENU_ITEMS.map((item) => (
+            <TouchableOpacity key={item.key} style={styles.menuRow} onPress={onClose}>
+              <View style={styles.menuIconBox}>
+                <Text style={styles.menuIconText}>{item.icon}</Text>
+              </View>
+              <Text style={styles.menuLabel}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </Pressable>
-    </Modal>
+    </Pressable>
+  </Modal>
+);
+
+/* ------------------------------------------------------------------
+   Reusable calculator button (encapsulates styling + role flags)
+   ------------------------------------------------------------------ */
+
+type CalcButtonProps = {
+  label: string;
+  onPress: (label: string) => void;
+  role?: 'operator' | 'function' | 'digit';
+};
+const CalcButton: FC<CalcButtonProps> = ({ label, onPress, role = 'digit' }) => {
+  const isOperator = role === 'operator';
+  const isFunction = role === 'function';
+
+  return (
+    <TouchableOpacity
+      onPress={() => onPress(label)}
+      activeOpacity={0.7}
+      style={[styles.button, isOperator && styles.operatorButton, isOperator && styles.operatorShadow]}
+    >
+      <Text
+        style={[
+          styles.buttonText,
+          isOperator && styles.operatorButtonText,
+          isFunction && styles.functionButtonText,
+        ]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
-}
+};
 
-function CalculatorScreen() {
-  const [display, setDisplay] = useState('0');
-  const [expression, setExpression] = useState('');
-  const [activeTab, setActiveTab] = useState('General');
-  const [menuVisible, setMenuVisible] = useState(false);
 
-  const handlePress = (value) => {
+type KeypadProps = { onPress: (label: string) => void };
+const Keypad: FC<KeypadProps> = ({ onPress }) => {
+  const layout = useMemo(
+    () => [
+      ['AC', '()', '%', '÷'],
+      ['7', '8', '9', '×'],
+      ['4', '5', '6', '−'],
+      ['1', '2', '3', '+'],
+      ['0', '.', '⌫', '='],
+    ],
+    []
+  );
+
+  const roleFor = (label: string): CalcButtonProps['role'] => {
+    if (['÷', '×', '−', '+', '='].includes(label)) return 'operator';
+    if (['AC', '()', '%', '⌫'].includes(label)) return 'function';
+    return 'digit';
+  };
+
+  return (
+    <View style={styles.keypad}>
+      {layout.map((row, i) => (
+        <View style={styles.row} key={i}>
+          {row.map((label) => (
+            <CalcButton key={label} label={label} onPress={onPress} role={roleFor(label)} />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+};
+
+
+
+const CalculatorScreen: FC = () => {
+  const [display, setDisplay] = useState<string>('0');
+  const [expression, setExpression] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<string>('General');
+  const [menuVisible, setMenuVisible] = useState<boolean>(false);
+
+  const sanitizeExpression = (input: string) =>
+    input.replace(/×/g, '*').replace(/÷/g, '/').replace(/%/g, '/100');
+
+  const handlePress = (value: string) => {
     if (value === 'AC') {
       setDisplay('0');
       setExpression('');
       return;
     }
+
     if (value === '⌫') {
       setDisplay((prev) => (prev.length > 1 ? prev.slice(0, -1) : '0'));
       return;
     }
+
     if (value === '=') {
       try {
-        const sanitized = display
-          .replace(/×/g, '*')
-          .replace(/÷/g, '/')
-          .replace(/%/g, '/100');
-        // eslint-disable-next-line no-eval
-        const result = eval(sanitized);
+        const sanitized = sanitizeExpression(display);
+        const result = Function(`"use strict"; return (${sanitized})`)();
         setExpression(display);
         setDisplay(String(result));
       } catch (e) {
@@ -108,27 +178,15 @@ function CalculatorScreen() {
       }
       return;
     }
+
     setDisplay((prev) => (prev === '0' ? value : prev + value));
   };
 
-  const buttons = [
-    ['AC', '()', '%', '÷'],
-    ['7', '8', '9', '×'],
-    ['4', '5', '6', '−'],
-    ['1', '2', '3', '+'],
-    ['0', '.', '⌫', '='],
-  ];
-
-  const isOperator = (v) => ['÷', '×', '−', '+', '='].includes(v);
-  const isFunction = (v) => ['AC', '()', '%', '⌫'].includes(v);
-
   const tabs = ['General', 'Advance', 'Bill Split', 'More'];
 
-  const handleTabPress = (tab) => {
+  const handleTabPress = (tab: string) => {
     setActiveTab(tab);
-    if (tab === 'More') {
-      setMenuVisible(true);
-    }
+    if (tab === 'More') setMenuVisible(true);
   };
 
   return (
@@ -146,71 +204,35 @@ function CalculatorScreen() {
           </Text>
         </View>
 
-        <View style={styles.keypad}>
-          {buttons.map((row, rowIndex) => (
-            <View style={styles.row} key={rowIndex}>
-              {row.map((btn) => (
-                <TouchableOpacity
-                  key={btn}
-                  style={[
-                    styles.button,
-                    isOperator(btn) && styles.operatorButton,
-                    btn === '=' && styles.equalsButton,
-                  ]}
-                  onPress={() => handlePress(btn)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.buttonText,
-                      isOperator(btn) && styles.operatorButtonText,
-                      isFunction(btn) && styles.functionButtonText,
-                    ]}
-                  >
-                    {btn}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ))}
-        </View>
+        <Keypad onPress={handlePress} />
 
         <View style={styles.tabBar}>
           {tabs.map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={styles.tabItem}
-              onPress={() => handleTabPress(tab)}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab && styles.tabTextActive,
-                ]}
-              >
-                {tab}
-              </Text>
+            <TouchableOpacity key={tab} style={styles.tabItem} onPress={() => handleTabPress(tab)}>
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
               {activeTab === tab && <View style={styles.tabDot} />}
             </TouchableOpacity>
           ))}
         </View>
+
         <View style={styles.homeIndicator} />
       </View>
 
       <MoreMenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
     </SafeAreaView>
   );
-}
+};
 
-export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
 
-  if (showSplash) {
-    return <SplashScreen onFinish={() => setShowSplash(false)} />;
-  }
 
+const App: FC = () => {
+  const [showSplash, setShowSplash] = useState<boolean>(true);
+  if (showSplash) return <SplashScreen onFinish={() => setShowSplash(false)} />;
   return <CalculatorScreen />;
-}
+};
+
+export default App;
+
 
 const styles = StyleSheet.create({
   // Splash
@@ -318,8 +340,12 @@ const styles = StyleSheet.create({
   operatorButton: {
     backgroundColor: BLUE,
   },
-  equalsButton: {
-    backgroundColor: BLUE_TEXT,
+  operatorShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 5,
   },
   buttonText: {
     fontSize: 26,
